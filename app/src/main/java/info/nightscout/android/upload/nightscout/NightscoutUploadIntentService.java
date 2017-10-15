@@ -11,8 +11,8 @@ import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 import info.nightscout.android.R;
-import info.nightscout.android.medtronic.MainActivity;
 import info.nightscout.android.model.medtronicNg.PumpStatusEvent;
+import info.nightscout.android.utils.DataStore;
 import io.realm.Realm;
 import io.realm.RealmResults;
 
@@ -21,7 +21,6 @@ public class NightscoutUploadIntentService extends IntentService {
     private static final String TAG = NightscoutUploadIntentService.class.getSimpleName();
 
     private Context mContext;
-    private Realm mRealm;
     private NightScoutUpload mNightScoutUpload;
 
     public NightscoutUploadIntentService() {
@@ -49,7 +48,7 @@ public class NightscoutUploadIntentService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         Log.d(TAG, "onHandleIntent called");
-        mRealm = Realm.getDefaultInstance();
+        Realm mRealm = Realm.getDefaultInstance();
 
         RealmResults<PumpStatusEvent> records = mRealm
                 .where(PumpStatusEvent.class)
@@ -67,9 +66,8 @@ public class NightscoutUploadIntentService extends IntentService {
                     Log.i(TAG, String.format("Starting upload of %s record using a REST API", records.size()));
                     String urlSetting = prefs.getString(mContext.getString(R.string.preference_nightscout_url), "");
                     String secretSetting = prefs.getString(mContext.getString(R.string.preference_api_secret), "YOURAPISECRET");
-                    int uploaderBatteryLevel = MainActivity.batLevel;
                     Boolean uploadSuccess = mNightScoutUpload.doRESTUpload(urlSetting,
-                            secretSetting, uploaderBatteryLevel, records);
+                            secretSetting, DataStore.getInstance().getUploaderBatteryLevel(), records);
                     if (uploadSuccess) {
                         mRealm.beginTransaction();
                         for (PumpStatusEvent updateRecord : records) {

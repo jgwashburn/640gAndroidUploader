@@ -15,15 +15,15 @@ import retrofit2.converter.gson.GsonConverterFactory;
 public class UploadApi {
     private Retrofit retrofit;
     private GlucoseEndpoints glucoseEndpoints;
-    private BolusEndpoints bolusApi;
+    private BolusEndpoints bolusEndpoints;
     private DeviceEndpoints deviceEndpoints;
 
     public GlucoseEndpoints getGlucoseEndpoints() {
         return glucoseEndpoints;
     }
 
-    public BolusEndpoints getBolusApi() {
-        return bolusApi;
+    public BolusEndpoints getBolusEndpoints() {
+        return bolusEndpoints;
     }
 
     public DeviceEndpoints getDeviceEndpoints() {
@@ -51,7 +51,7 @@ public class UploadApi {
                 Request request = requestBuilder.build();
                 return chain.proceed(request);
             }
-        };
+        }
 
         OkHttpClient.Builder okHttpClient = new OkHttpClient().newBuilder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -71,8 +71,7 @@ public class UploadApi {
                 .build();
 
         glucoseEndpoints = retrofit.create(GlucoseEndpoints.class);
-        bolusApi = retrofit.create(BolusEndpoints.class);
+        bolusEndpoints = retrofit.create(BolusEndpoints.class);
         deviceEndpoints = retrofit.create(DeviceEndpoints.class);
-
     }
 }

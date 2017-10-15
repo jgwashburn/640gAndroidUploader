@@ -15,6 +15,7 @@ import info.nightscout.android.model.medtronicNg.PumpStatusEvent;
 import info.nightscout.android.upload.nightscout.serializer.EntriesSerializer;
 
 import android.support.annotation.NonNull;
+
 import info.nightscout.api.UploadApi;
 import info.nightscout.api.GlucoseEndpoints;
 import info.nightscout.api.BolusEndpoints.BolusEntry;
@@ -26,20 +27,22 @@ import info.nightscout.api.DeviceEndpoints.Battery;
 import info.nightscout.api.DeviceEndpoints.PumpStatus;
 import info.nightscout.api.DeviceEndpoints.PumpInfo;
 import info.nightscout.api.DeviceEndpoints.DeviceStatus;
+import okhttp3.ResponseBody;
+import retrofit2.Response;
 
-public class NightScoutUpload {
+class NightScoutUpload {
 
     private static final String TAG = NightscoutUploadIntentService.class.getSimpleName();
     private static final SimpleDateFormat ISO8601_DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.getDefault());
 
-    public NightScoutUpload () {
+    NightScoutUpload() {
 
     }
 
-    public Boolean doRESTUpload(String url,
-                                String secret,
-                                int uploaderBatteryLevel,
-                                List<PumpStatusEvent> records) {
+    Boolean doRESTUpload(String url,
+                         String secret,
+                         int uploaderBatteryLevel,
+                         List<PumpStatusEvent> records) {
         Boolean success = false;
         try {
             success = isUploaded(records, url, secret, uploaderBatteryLevel);
@@ -51,15 +54,15 @@ public class NightScoutUpload {
 
 
     private boolean isUploaded(List<PumpStatusEvent> records,
-                                 String baseURL,
-                                 String secret,
-                                 int uploaderBatteryLevel) throws Exception {
+                               String baseURL,
+                               String secret,
+                               int uploaderBatteryLevel) throws Exception {
 
         UploadApi uploadApi = new UploadApi(baseURL, formToken(secret));
 
         boolean eventsUploaded = uploadEvents(uploadApi.getGlucoseEndpoints(),
-                 uploadApi.getBolusApi(),
-                 records );
+                uploadApi.getBolusEndpoints(),
+                records);
 
         boolean deviceStatusUploaded = uploadDeviceStatus(uploadApi.getDeviceEndpoints(),
                 uploaderBatteryLevel, records);
@@ -69,7 +72,7 @@ public class NightScoutUpload {
 
     private boolean uploadEvents(GlucoseEndpoints glucoseEndpoints,
                                  BolusEndpoints bolusEndpoints,
-                                 List<PumpStatusEvent> records ) throws Exception {
+                                 List<PumpStatusEvent> records) throws Exception {
 
 
         List<GlucoseEntry> glucoseEntries = new ArrayList<>();
@@ -77,35 +80,41 @@ public class NightScoutUpload {
 
         for (PumpStatusEvent record : records) {
 
-            GlucoseEntry  glucoseEntry = new GlucoseEntry();
+            GlucoseEntry glucoseEntry = new GlucoseEntry();
 
             glucoseEntry.setType("sgv");
             glucoseEntry.setDirection(EntriesSerializer.getDirectionStringStatus(record.getCgmTrend()));
             glucoseEntry.setDevice(record.getDeviceName());
             glucoseEntry.setSgv(record.getSgv());
-            glucoseEntry.setDate(record.getEventDate().getTime());
-            glucoseEntry.setDateString(record.getEventDate().toString());
+            glucoseEntry.setDate(record.getSgvDate().getTime());
+            glucoseEntry.setDateString(record.getSgvDate().toString());
 
             glucoseEntries.add(glucoseEntry);
 
-            BolusEntry  bolusEntry = new BolusEntry();
+            if (record.getBolusWizardBGL() != 0) {
+                BolusEntry bolusEntry = new BolusEntry();
 
-            bolusEntry.setType("mbg");
-            bolusEntry.setDate(record.getEventDate().getTime());
-            bolusEntry.setDateString(record.getEventDate().toString());
-            bolusEntry.setDevice(record.getDeviceName());
-            bolusEntry.setMbg(record.getBolusWizardBGL());
+                bolusEntry.setType("mbg");
+                bolusEntry.setDate(record.getEventDate().getTime());
+                bolusEntry.setDateString(record.getEventDate().toString());
+                bolusEntry.setDevice(record.getDeviceName());
+                bolusEntry.setMbg(record.getBolusWizardBGL());
 
-            bolusEntries.add(bolusEntry);
+                bolusEntries.add(bolusEntry);
+            }
 
         }
 
-        glucoseEndpoints.sendEntries(glucoseEntries).execute();
-        bolusEndpoints.sendEntries(bolusEntries).execute();
-
-
-
-         return true;
+        boolean uploaded = true;
+        if (glucoseEntries.size() > 0) {
+            Response<ResponseBody> result = glucoseEndpoints.sendEntries(glucoseEntries).execute();
+            uploaded = result.isSuccessful();
+        }
+        if (bolusEntries.size() > 0) {
+            Response<ResponseBody> result = bolusEndpoints.sendEntries(bolusEntries).execute();
+            uploaded = uploaded && result.isSuccessful();
+        }
+        return uploaded;
     }
 
     private boolean uploadDeviceStatus(DeviceEndpoints deviceEndpoints,
@@ -134,7 +143,7 @@ public class NightScoutUpload {
                     iob,
                     battery,
                     pumpstatus
-                    );
+            );
 
             DeviceStatus deviceStatus = new DeviceStatus(
                     uploaderBatteryLevel,
@@ -146,14 +155,16 @@ public class NightScoutUpload {
             deviceEntries.add(deviceStatus);
         }
 
-        for (DeviceStatus status: deviceEntries) {
-            deviceEndpoints.sendDeviceStatus(status).execute();
+        boolean uploaded = true;
+        for (DeviceStatus status : deviceEntries) {
+            Response<ResponseBody> result = deviceEndpoints.sendDeviceStatus(status).execute();
+            uploaded = uploaded && result.isSuccessful();
         }
 
-        return true ;
+        return uploaded;
     }
 
-     @NonNull
+    @NonNull
     private String formToken(String secret) throws NoSuchAlgorithmException, UnsupportedEncodingException {
         MessageDigest digest = MessageDigest.getInstance("SHA-1");
         byte[] bytes = secret.getBytes("UTF-8");

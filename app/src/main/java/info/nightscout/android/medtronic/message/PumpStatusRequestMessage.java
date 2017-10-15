@@ -21,6 +21,7 @@ public class PumpStatusRequestMessage extends MedtronicSendMessageRequestMessage
         super(SendMessageType.READ_PUMP_STATUS_REQUEST, pumpSession, null);
     }
 
+    // TODO - this needs refactoring
     public PumpStatusResponseMessage send(UsbHidDriver mDevice, int millis) throws IOException, TimeoutException, ChecksumException, EncryptionException, UnexpectedMessageException {
         sendMessage(mDevice);
         if (millis > 0) {
@@ -31,7 +32,7 @@ public class PumpStatusRequestMessage extends MedtronicSendMessageRequestMessage
             }
         }
         // Read the 0x81
-        readMessage(mDevice);
+        readMessage_0x81(mDevice);
         if (millis > 0) {
             try {
                 Log.d(TAG, "waiting " + millis +" ms");
@@ -39,9 +40,17 @@ public class PumpStatusRequestMessage extends MedtronicSendMessageRequestMessage
             } catch (InterruptedException e) {
             }
         }
-        PumpStatusResponseMessage response = this.getResponse(readMessage(mDevice));
+        // Read the 0x80
+        byte[] payload = readMessage(mDevice);
+        // if pump sends an unexpected response get the next response as pump can resend or send out of sequence and this avoids comms errors
+        if (payload.length < 0x9C) {
+            payload = readMessage(mDevice);
+        }
 
-        return response;
+        // clear unexpected incoming messages
+        clearMessage(mDevice);
+
+        return this.getResponse(payload);
     }
 
     @Override

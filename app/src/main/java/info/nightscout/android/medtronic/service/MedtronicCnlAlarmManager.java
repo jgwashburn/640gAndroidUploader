@@ -5,23 +5,21 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
-import android.support.v4.content.WakefulBroadcastReceiver;
 import android.util.Log;
 
 import java.util.Date;
 
-import info.nightscout.android.medtronic.MainActivity;
+import info.nightscout.android.utils.ConfigurationStore;
 
 /**
  * Created by lgoedhart on 14/07/2016.
  */
 public class MedtronicCnlAlarmManager {
     private static final String TAG = MedtronicCnlAlarmManager.class.getSimpleName();
-    private static final int ALARM_ID = 102; // Alarm id
+    private static final int ALARM_ID = 102;
 
     private static PendingIntent pendingIntent = null;
     private static AlarmManager alarmManager = null;
-    private static long nextAlarm = Long.MAX_VALUE;
 
     public static void setContext(Context context) {
         cancelAlarm();
@@ -29,11 +27,6 @@ public class MedtronicCnlAlarmManager {
         alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         Intent intent = new Intent(context, MedtronicCnlAlarmReceiver.class);
         pendingIntent = PendingIntent.getBroadcast(context, ALARM_ID, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-    }
-
-    // Setting the alarm in 15 seconds from now
-    public static void setAlarm() {
-        setAlarm(System.currentTimeMillis());
     }
 
     /**
@@ -45,7 +38,7 @@ public class MedtronicCnlAlarmManager {
         setAlarm(System.currentTimeMillis() + inFuture);
     }
 
-    // Setting the alarm to call onRecieve
+    // Setting the alarm to call onReceive
     public static void setAlarm(long millis) {
         if (alarmManager == null || pendingIntent == null)
             return;
@@ -57,21 +50,14 @@ public class MedtronicCnlAlarmManager {
         if (millis < now)
             millis = now;
 
-        // only accept alarm nearer than the last one
-        //if (nextAlarm < millis && nextAlarm > now) {
-        //    return;
-        //}
-
         cancelAlarm();
 
-        nextAlarm = millis;
-
         Log.d(TAG, "Alarm set to fire at " + new Date(millis));
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             alarmManager.setAlarmClock(new AlarmManager.AlarmClockInfo(millis, null), pendingIntent);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             // Android 5.0.0 + 5.0.1 (e.g. Galaxy S4) has a bug.
-            // Alarms are not exact. Fixed in 5.0.2 oder CM12
+            // Alarms are not exact. Fixed in 5.0.2 and CM12
             alarmManager.setExact(AlarmManager.RTC_WAKEUP, millis, pendingIntent);
         } else {
             alarmManager.set(AlarmManager.RTC_WAKEUP, millis, pendingIntent);
@@ -80,7 +66,11 @@ public class MedtronicCnlAlarmManager {
 
     // restarting the alarm after MedtronicCnlIntentService.POLL_PERIOD_MS from now
     public static void restartAlarm() {
-        setAlarmAfterMillis(MainActivity.pollInterval + MedtronicCnlIntentService.POLL_GRACE_PERIOD_MS);
+        // Due to potential of some versions of android to mangle alarms and clash with polling times
+        // the default alarm reset is set to POLL_PERIOD_MS + 60 seconds
+        // It's expected to trigger between polls if alarm has not been honored with a safe margin greater then
+        // the around 10 minutes that some OS versions force during sleep
+        setAlarmAfterMillis(MedtronicCnlIntentService.POLL_PERIOD_MS + 60000L); // grace already accounted for when using current intent time to set default restart
     }
 
     // Cancel the alarm.

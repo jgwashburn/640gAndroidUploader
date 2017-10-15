@@ -15,8 +15,6 @@ import info.nightscout.android.medtronic.exception.ChecksumException;
 public abstract class ContourNextLinkBinaryRequestMessage<T> extends ContourNextLinkRequestMessage<T> {
     private final static int ENVELOPE_SIZE = 33;
 
-    //protected ByteBuffer mBayerEnvelope;
-    //protected ByteBuffer mBayerPayload;
     protected CommandType mCommandType = CommandType.NO_TYPE;
     protected MedtronicCnlSession mPumpSession;
 
@@ -27,6 +25,8 @@ public abstract class ContourNextLinkBinaryRequestMessage<T> extends ContourNext
         this.mCommandType = commandType;
 
         // Validate checksum
+        // FIXME - this is not needed. Because we're setting the checksum in buildPayload, we know it's
+        // going to be okay. However, this check does need to be done when reading a message.
         byte messageChecksum = this.mPayload.get(32);
         byte calculatedChecksum = (byte) (MessageUtils.oneByteSum(this.mPayload.array()) - messageChecksum);
 
@@ -43,7 +43,7 @@ public abstract class ContourNextLinkBinaryRequestMessage<T> extends ContourNext
      */
     protected void sendMessage(UsbHidDriver mDevice) throws IOException {
         super.sendMessage(mDevice);
-        mPumpSession.incrBayerSequenceNumber();
+        mPumpSession.incrCnlSequenceNumber();
     }
 
     protected static byte[] buildPayload(CommandType commandType, MedtronicCnlSession pumpSession, byte[] payload) {
@@ -54,11 +54,11 @@ public abstract class ContourNextLinkBinaryRequestMessage<T> extends ContourNext
 
         payloadBuffer.put((byte) 0x51);
         payloadBuffer.put((byte) 0x3);
-        payloadBuffer.put("000000".getBytes()); // Text of PumpInfo serial, but 000000 for 640g
+        payloadBuffer.put("000000".getBytes()); // Text of PumpInfo serial, but 000000 for 600 Series pumps
         byte[] unknownBytes = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         payloadBuffer.put(unknownBytes);
         payloadBuffer.put(commandType.getValue());
-        payloadBuffer.putInt(pumpSession.getBayerSequenceNumber());
+        payloadBuffer.putInt(pumpSession.getCnlSequenceNumber());
         byte[] unknownBytes2 = {0, 0, 0, 0, 0};
         payloadBuffer.put(unknownBytes2);
         payloadBuffer.putInt(payloadLength);
